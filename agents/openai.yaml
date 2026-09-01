@@ -1,0 +1,4 @@
+interface:
+  display_name: "CNKI Skills"
+  short_description: "CNKI search, download, export, and Zotero workflows"
+  default_prompt: "Use $cnki-skills to search CNKI, download selected papers through my authorized browser session, and import them into Zotero."
