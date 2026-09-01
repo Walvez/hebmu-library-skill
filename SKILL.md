@@ -1,13 +1,13 @@
 ---
-name: cnki-skills
-description: Use for Claude-like CNKI workflows in Codex: CNKI keyword and advanced search, result parsing, pagination, paper detail extraction, journal lookup/index/TOC checks, PDF/CAJ download triggering through the user's active browser session, CNKI citation export, Zotero metadata import, and Zotero attachment workflows. For Hebei Medical University users this skill is the full 河北医科大学图书馆论文下载 skill: WebVPN-proxied CNKI + 万方医学网 + 中华医学期刊全文数据库(yiigle) download pipelines, degree-paper PDF extraction, captcha handling, and the Zotero local-API write flow. Preserve the upstream Claude skill capabilities and add risk reminders without deleting core functions.
+name: hebmu-library
+description: 河北医科大学图书馆论文下载 skill (Hebei Medical University library paper-download for Codex). WebVPN-proxied full pipelines: CNKI keyword/advanced search and parsing, 万方医学网 MedFulltext/CMAJump/DegreePaper, 中华医学期刊全文数据库 (yiigle) downloadPdfToken API chain with captcha loop and DOI->cmaid bridging, FMRS full-text requests and mail-harvest, sci-hub CDP batch capture, degree-paper PDF extraction, and idempotent Zotero local-API import with PDF attachments. Also preserves the upstream CNKI workflow capabilities (journal index/TOC, citation export, attachment workflows).
 ---
 
-# CNKI Skills → 河北医科大学图书馆论文下载
+# 河北医科大学图书馆文献检索与下载(hebmu-library)
 
 ## Overview
 
-This skill adapts `cookjohn/cnki-skills` from Claude Code to Codex and extends it, for Hebei Medical University users, into the complete school-library paper-download playbook: search CNKI, parse results, inspect papers and journals, trigger downloads in the user's browser, download from 万方医学网 and 中华医学期刊全文数据库 (yiigle) through the WebVPN tunnel, export citation metadata, and push records with PDF attachments into Zotero via the local API.
+This skill extends `cookjohn/cnki-skills` (Claude Code, MIT) into the complete Hebei Medical University school-library literature retrieval & download playbook: search CNKI, parse results, inspect papers and journals, trigger downloads in the user's browser, download from 万方医学网 and 中华医学期刊全文数据库 (yiigle) through the WebVPN tunnel, export citation metadata, and push records with PDF attachments into Zotero via the local API.
 
 Use it when the user asks to work with CNKI/知网, 万方, yiigle/中华医学期刊, Chinese academic literature, CNKI search results, CNKI PDFs/CAJ files, Zotero import, GB/T 7714 citation output, or reference verification for a Chinese medical research project.
 
@@ -129,7 +129,7 @@ Before Zotero writes:
 Run:
 
 ```bash
-python ~/.codex/skills/cnki-skills/scripts/push_to_zotero.py /path/to/papers.json
+python ~/.codex/skills/hebmu-library/scripts/push_to_zotero.py /path/to/papers.json
 ```
 
 Example with a local attachment:
