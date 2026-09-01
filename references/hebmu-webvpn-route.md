@@ -244,3 +244,36 @@ sci-hub 收不进的近年外文论文走这里申请全文投递(邮件/FMRS �
 | Zotero 文件认证 | `POST /api/users/0/items/<key>/file` + `If-None-Match: *` |
 | Zotero 上传 | `POST /api/local/uploads/<uploadKey>`(顶级路径) |
 | Zotero 删除头 | `If-Unmodified-Since-Version: <version>` |
+
+## 10. 无 DOI 中文论文 → cmaid 定位三路桥(实测 2026-08-31)
+
+PubMed 无 DOI 的中华系列中文论文(摘要页 ArticleId 为空),按顺序试:
+
+1. **DOI→LinkIn 桥**(有 DOI 时首选,公开站不占隧道):`https://doi.org/<doi>` 302 →
+   `www.yiigle.com/LinkIn.do?linkin_type=DOI&DOI=<doi>`(小 Vue SPA)→
+   ego 打开等 ~10s 读 `location.href` 得 `rs.yiigle.com/cmaid/<id>`。
+2. **期刊官网过刊目录**(无 DOI):中华胃肠外科杂志官网 `zhwcwkzz.yiigle.com`
+   (yiigle 子域!),过刊页 `gkmc/index.htm` 只列 2020+;期目录 URL 规律
+   `/CN441530<YYYY><2位期号>/index.jhtml?tplReset=qikan`,页内文章标题直接挂
+   `rs.yiigle.com/cmaid/<id>` 链接。⚠️ 别与中华消化外科 `zhxhwkzz.xml-journal.net`
+   (`/cn/article/<年>/<期>` 结构)搞混。PubMed 英译标题常与期刊官方中文标题差异巨大
+   (double tracks anastomosis ↔ 改良空肠间置术),**用卷期页码定位最稳**。
+3. **万方短特征词**:官方中文标题的全等匹配失败时,取标题中段 4-8 字重搜。
+   f.med.wanfangdata 全文接口在 WebVPN 重登后可能要求个人登录(会话握手失效),
+   此时改走 yiigle。
+
+拿到 cmaid 后走 §8 yiigle API 链下载;批量时先全部试探 token,needCaptcha 的
+集中存图人读(`read_image`)后一次提交,验证码约 60% 一次通过。
+
+## 11. FMRS 邮箱收割(mail.metstr.net,实测 2026-08-31)
+
+文献传递到货在 FMRS 专用邮箱(Winmail)。入口:`www.metstr.com` 顶栏「我的邮箱」
+点击 → 自动发新 token 跳 `mail.metstr.net/main.php?token=<t>#msglist`(旧 token
+过期就用这招重进;邮件保留 20 天,别囤)。
+
+- 读视图是**单页渲染全部消息**:所有附件 `act=download` 链接同页可取,
+  按 `msgid=N&attach=K` 去重;同 origin `fetch` 直取 base64,`%PDF` 校验。
+- **附件文件名自带 PMID**:`P<PMID>_<num>.pdf`(少数 `DOIE…`)→ 直接映射筛选清单 No,
+  零标题匹配成本。
+- 提交请求后 1-3 天内分批到货,一次 7-9 篇/封;「温馨提示:高难文献正在查找」
+  = 还在处理,等下一轮即可。
