@@ -244,6 +244,12 @@ sci-hub 收不进的近年外文论文走这里申请全文投递(邮件/FMRS �
 | Zotero 文件认证 | `POST /api/users/0/items/<key>/file` + `If-None-Match: *` |
 | Zotero 上传 | `POST /api/local/uploads/<uploadKey>`(顶级路径) |
 | Zotero 删除头 | `If-Unmodified-Since-Version: <version>` |
+| 万方题录直取 | `GET med.wanfangdata.com.cn/Search/ExportTo?artilceIds=<csv>&exportType=Endnote`(注意拼写 artilceIds) |
+| 万方记录 ID | 结果行 `input.item-checkbox[data-itemid]` |
+| SinoMed 题录 | 结果行 `input[name="ids"]` 的 `mydata` 属性(逗号=分隔全字段)+`title` |
+| SinoMed WBM | 快检框不支持 OR,必须走高级检索表达式框 |
+| CENTRAL 行组合 | 空行直接键入 `#2 OR ((#4 OR #5) AND #6)`,MeSH 行必须走 picker |
+| CENTRAL 导出 | `sessionStorage.exportOptions` 按类型存 `{exportAll, articleIds}`;RIS 对应 `downloadType=endnote` |
 
 ## 10. 无 DOI 中文论文 → cmaid 定位三路桥(实测 2026-08-31)
 
@@ -277,3 +283,71 @@ PubMed 无 DOI 的中华系列中文论文(摘要页 ArticleId 为空),按顺序
   零标题匹配成本。
 - 提交请求后 1-3 天内分批到货,一次 7-9 篇/封;「温馨提示:高难文献正在查找」
   = 还在处理,等下一轮即可。
+
+## 12. 万方医学网题录直取管线(实测 2026-09-05,5701 条)
+
+批量导出按钮走表单+弹窗,合成点击经常静默失败。直接打接口:
+
+1. 检索照常用(§3),分库用 facet 复选框+「筛选」(直接点 facet 文字无效);
+   分库切换最稳的是改 URL:`资源类型_f=<中文期刊|学位论文|会议论文|外文期刊>`。
+2. 分页是直链 `&p=N`(共 N 页);跳页框会误伤年份框,认准跟在 `/N` 旁边的那个。
+   单页 10 条锁死,无 20/50 选项。
+3. 每页采 `input.item-checkbox[data-itemid]`(免点选!checkbox 的 value恒为 on 没用),
+   200 个一组调 `GET med.wanfangdata.com.cn/Search/ExportTo?artilceIds=<csv>&exportType=Endnote`
+   (注意官方拼写就是 artilceIds,带隧道 cookies),回包即 EndNote 文本流,按字节存 `.enw`。
+4. 转码坑:回包 bytes → base64 必须走 `String.fromCharCode` 裸拼 + `btoa`,
+   任何 unescape/encodeURIComponent 中转都会把中文烧成 Latin-1 乱码。
+5. 反爬:约 100 页连翻后出滑块(且 IP 会浮动丢机构上下文);降速(页间隔 ≥6s)+
+   见滑块就停手,等用户拖完再续。购物车 200/批是展示上限,直取链不受此限
+   (但单次 URL 过长会 414,200 一组最稳)。
+6. 不可选行约 0.5–4%(无 checkbox,多为未购记录),终稿如实披露;页码用
+   `b.current` 校验,跑偏立即停。
+
+## 13. SinoMed 隧道与 mydata 直采(实测 2026-09-05,CBM 1960+WBM 1939)
+
+1. 资源导航点击经常回弹图书馆首页;**直接 goto 解析器 URL**
+   `…/link/309/3`(隧道内)即落 SinoMed 隧道页,认准「欢迎 河北医科大学」。
+2. 隧道会话约 30 分钟失效(症状:列表清空+「登录失效,请重新登录」),
+   重进解析器 URL 即恢复,别在失效态上硬磨。
+3. 记录行 `input[name="ids"]` 的 `mydata` 属性自带全题录
+   (ui/作者/单位/刊年月卷期页,`title` 属性即题名),100 条/页(jQuery-change 触发),
+   下一页链采 20 页即全收,按 ui 去重(本轮零重复)。
+4. **快检框不支持 OR**(带 OR 直接 0 条);WBM 英文式必须走高级检索表达式框
+   (textarea#searchword),完整布尔一次通过。
+5. CBM 中文式与 WBM 英文式分开跑分开存(指南要求),不要混。
+
+## 14. yiigle 跨刊题录清单(实测 2026-09-05,372 条)
+
+平台无批量 RIS 导出时走结构化清单:9 词组逐个 `Paper/Search` + `.el-pager li`
+翻页,按 `.s_searchResult_li` 采。**标题锚点=首个长文本链接**
+(首个 cmaid 链接经常是「全文HTML」按钮,误抓则全坏);刊名《》/年份卷期正则另取;
+cmaid 取卡片内任一 `cmaid/(\d+)` 链接。9 词组后 6 个多为首词子集(零新增属正常,
+用 cmaid 去重验证,别当漏抓)。存 `cmaid/title/authors/journal/yearvol/groups` CSV。
+
+## 15. CENTRAL Cochrane 实战(实测 2026-09-05,447 条 PARTIAL)
+
+1. Manager 行内手打 MeSH(`[...]`)必被校验器拒;MeSH 必须走 MeSH browser 页
+   (lookup→Exact match→Explode→Select→Add to search manager)。
+2. 行间组合直接在空行键入 `#2 OR ((#4 OR #5) AND #6)`,Continue 可用。
+3. 幽灵 facet 排查:结果被压到个位数且年份面全 0 → 检查 `Retracted Publication`
+   等筛选面是否被误勾,点 pill ✕ 去掉。
+4. Trials 内嵌面板可能**只渲染条目不渲染选择/导出控件**
+   (25 条 label 对 0 个 checkbox 输入),而 Reviews 分区正常——此时不要反复点登录,
+   直接改收结构化清单:18 页逐页采 CN 号+标题+来源标签(CN 号零重复即闭合)。
+5. 清单后做三级匹配:标准化标题 exact/contain → PubMed API distinctive-token
+   反查(accept 条件 inter≥8 且 j≥0.4)→ 注册库标题匹配;剩下 `central_only` 走详情页
+   补作者/刊/年/DOI(墙外可见,摘要墙内),`review` 对留人工裁决。
+6. RIS 不是必须的;方法学要的是可复现+全捕获+每条有去向+限制透明披露。
+
+## 16. 注册库横扫(实测 2026-09-05,CT.gov 286/ChiCTR 36/CRIS 1/ICTRP 139)
+
+- **CT.gov**:API v2(`query.term`+`pageSize=100`+`nextPageToken`),4 宽术语按 NCT 去重,
+  全字段 JSON + 摘要 CSV 双存档;旧库 NCT 全保留即连续性通过。
+- **ChiCTR**:搜索 DIV `#handle-search` 是 jQuery 绑定,原生 click/回车无效,
+  必须 `jQuery(...).trigger('click')`;10 条/页数字翻页;旧号段(TRC/IPC/IOR/IIR)合法。
+- **CRIS**:先调英文,搜 `input[name="searchWord"]`,提交调 **`fn_search(1,true)`**
+  (顶部框 goSearch 在该页无 subForm 会报错);韩文 0 条有页面证据即有效结论。
+- **ICTRP**:`Trial2.aspx?TrialID=` 正则采号(前缀即来源库),10 条/页数字+`>>`末页;
+  与 CT.gov/ChiCTR 重叠高,合并阶段按注册号+secondary ID 去重。
+- **jRCT**:curl 与 Chromium 双通道 SSL 握手失败即记 deviation(附证据),日本试验由
+  ICTRP-JPRN 替代覆盖,写进局限性,不反复重试。
