@@ -23,7 +23,7 @@ Use it when the user asks to work with CNKI/知网, 万方, yiigle/中华医学�
 - Use the user's chosen CNKI route: school VPN, library portal, institutional access, or purchased database account.
   - Hebei Medical University users: `references/hebmu-webvpn-route.md` is the master route book — CNKI + 万方医学网 + yiigle pipelines, fixed WebVPN hashes, ego-browser hard rules, yiigle downloadPdfToken/auth/downloadPdf API chain with captcha loop, degree-paper PDF extraction, and the Zotero local-API attachment flow (§1–§8). For any hebmu download task read it FIRST.
   - Chinese-paper channel priority: 万方 (MedFulltext) → CMAJump → yiigle API chain; CNKI only when it has a PDF button. Match titles by normalized exact-equality, never fuzzy similarity.
-- If CNKI asks for login or a slider captcha, follow the upstream behavior: detect it, pause, ask the user to complete it in Chrome, then continue.
+- If CNKI asks for login or a slider captcha, follow the upstream behavior: detect it, pause, follow the current ego-browser handoff flow and wait for the user to complete it, then continue.
 - Do not claim a paper was downloaded or imported until browser/Zotero output is checked.
 - Do not invent CNKI metadata, DOI, PMID, author names, issue, pages, or journal information.
 - For batch operations, ask the user which results to process or confirm the batch scope.
@@ -32,15 +32,9 @@ Use it when the user asks to work with CNKI/知网, 万方, yiigle/中华医学�
 
 The upstream Claude version refers to `mcp__chrome-devtools__navigate_page`, `evaluate_script`, `take_snapshot`, and `wait_for`.
 
-In Codex:
+In Codex, read the installed `ego-browser` Skill and use Ego for page operations, including logged-in Chrome/VPN/CNKI sessions inherited by Ego. Its current helper/task-space/handoff documentation is authoritative for browser mechanics. Upstream Chrome names describe operations, not a required tool or another default browser.
 
-- Prefer the Chrome control skill when the user's logged-in Chrome/VPN/CNKI state matters.
-- Use browser control for general local/browser testing when existing Chrome cookies are not needed.
-- Translate upstream `navigate_page` to browser navigation.
-- Translate upstream `evaluate_script` to the available browser/Chrome JavaScript execution mechanism.
-- Translate upstream `take_snapshot` or `wait_for` to browser inspection/snapshot/wait operations.
-
-If no browser-control tool is available in the current session, provide exact manual browser steps and use files exported by the user.
+Map `navigate_page` to Ego navigation, `evaluate_script` to `js`, and `take_snapshot` / `wait_for` to current observation/wait helpers; consult `help` if needed. Browser selection and failure/fallback boundaries follow the global AGENTS browser rule. If no usable tool remains, preserve partial work and provide the exact missing step for the user.
 
 ## Workflow Router
 

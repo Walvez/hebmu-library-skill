@@ -23,12 +23,10 @@
 `https://webvpn.hebmu.edu.cn/` → CAS 统一身份认证(浏览器已存密码,点
 「CAS统一身份认证登录」→「登 录」即成,密码框 JS 读值为空是受保护假象,直接点登录)。
 
-## 1. ego-browser 硬规则(全部踩过坑)
+## 1. 浏览器操作与本站约束
 
-- **每个 heredoc 开头必须 `await useOrCreateTaskSpace(<id或name>)`**;接管用
-  `takeOverTaskSpace('任务空间名')`(数字 id 会返回 undefined),用户确认后才能接管。
-- ESM 环境:`const fs = await import('node:fs')`;`require` + 顶层 await 会炸。
-- `js()` 返回的 JSON **已是对象**,不要再 `JSON.parse`(会抛 "[object Object]")。
+Ego 的任务空间、接管、helper 参数/单位和 Node/页面上下文规则以当前 `ego-browser` Skill 为准；先读它，不在此复制另一套接口说明。浏览器选择与失败 fallback 见本 Skill 入口的 Codex Tool Mapping。以下保留本站下载/隧道相关检查：
+
 - CDP 点击与网络监听(drainEvents)必须在**同一个 heredoc 会话**里做,跨会话捕获为空。
 - 往生成的 JS 字符串里注值一律 `JSON.stringify()`;正则判等用
   `text.replace(/[\s\p{P}\p{S}]+/gu,'')` 归一化后比较。
