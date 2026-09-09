@@ -8,8 +8,8 @@ after the item metadata is saved.
 
 from __future__ import annotations
 
+import argparse
 import hashlib
-import io
 import json
 import re
 import sys
@@ -20,8 +20,7 @@ from pathlib import Path
 from typing import Any
 
 
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
-sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
+
 
 ZOTERO_API = "http://127.0.0.1:23119/connector"
 HTTP_TIMEOUT = 15
@@ -54,10 +53,28 @@ def zotero_request(endpoint: str, data: dict[str, Any] | None = None) -> tuple[i
         return -1, {"error": f"request timed out after {HTTP_TIMEOUT}s"}
 
 
-def make_session_id(items: list[dict[str, Any]]) -> str:
-    """Create a deterministic session id so repeated imports are idempotent."""
-    key = "|".join(sorted(str(item.get("title", "")) for item in items))
-    return hashlib.md5(key.encode("utf-8", errors="surrogateescape")).hexdigest()[:12]
+def make_session_id(items, target, library_id):
+    """Bind content and input order to the destination; omit volatile transport fields."""
+    canonical = [{k: v for k, v in item.items() if k not in ('id', 'accessDate')}
+                 for item in items]
+    key = json.dumps([library_id, target, canonical], ensure_ascii=False,
+                     sort_keys=True, separators=(',', ':'))
+    return hashlib.sha256(key.encode('utf-8')).hexdigest()[:32]
+
+
+def check_target(target, library_id):
+    """Read-only check; cannot atomically lock Connector's selected UI target."""
+    if (not isinstance(target, str) or not re.fullmatch(r'[CL][1-9][0-9]*', target)
+            or type(library_id) is not int or library_id < 1):
+        return False
+    selected = get_selected_collection()
+    if not isinstance(selected, dict):
+        return False
+    current = ('C' + str(selected['id']) if selected.get('id') is not None
+               else 'L' + str(selected.get('libraryID')))
+    return (current == target and selected.get('libraryID') == library_id
+            and selected.get('libraryEditable') is True
+            and selected.get('editable') is True)
 
 
 def get_selected_collection() -> dict[str, Any] | None:
@@ -76,7 +93,7 @@ def list_collections() -> None:
         raise SystemExit(1)
 
     print(f"当前选中分类: {data.get('name', '?')} (ID: {data.get('id', '?')})")
-    print(f"文库: {data.get('libraryName', '?')}")
+    print(f"文库: {data.get('libraryName', '?')} (libraryID: {data.get('libraryID', '?')})")
     print()
     print("可用分类:")
     for target in data.get("targets", []):
@@ -231,34 +248,41 @@ def load_records(path_arg: str | None) -> list[dict[str, Any]]:
 
 
 def main() -> None:
-    if len(sys.argv) > 1 and sys.argv[1] == "--list":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('input', nargs='?')
+    parser.add_argument('--list', action='store_true')
+    parser.add_argument('--target', help='Confirmed local Connector tree ID: C123 or L1')
+    parser.add_argument('--library-id', type=int)
+    args = parser.parse_args()
+    if args.list:
         list_collections()
         return
-
-    status, _ = zotero_request("ping")
-    if status == 0:
-        print("Error: Zotero 未运行。请启动 Zotero 桌面端。")
+    if (not args.target or not re.fullmatch(r'[CL][1-9][0-9]*', args.target)
+            or not args.library_id or args.library_id < 1):
+        parser.error('Import requires --target C123|L1 and --library-id N; no write attempted')
+    records = load_records(args.input)
+    # Reject the batch before writing: filtering only items misaligns attachment parents.
+    if not records or any(not isinstance(r, dict) or not isinstance(r.get('title'), str)
+                          or not r['title'].strip() for r in records):
+        print('Invalid/untitled record; no metadata or attachment write attempted.')
         raise SystemExit(1)
-
-    records = load_records(sys.argv[1] if len(sys.argv) > 1 else None)
-    items = [build_zotero_item(record) for record in records if record.get("title")]
-    if not items:
-        print("Error: 无有效论文题名，未写入 Zotero。")
+    items = [build_zotero_item(record) for record in records]
+    if not check_target(args.target, args.library_id):
+        print('Target missing, mismatched, unreadable or not editable; no write attempted.')
         raise SystemExit(1)
-
-    session_id = make_session_id(items)
+    session_id = make_session_id(items, args.target, args.library_id)
     for index, item in enumerate(items):
         item["id"] = f"cnki_{session_id}_{index}"
 
     payload = {"sessionID": session_id, "uri": items[0].get("url", ""), "items": items}
     status, resp = zotero_request("saveItems", payload)
 
-    if status in {201, 409}:
-        if status == 201:
-            print(f"成功: 已写入 Zotero 元数据 ({len(items)} 篇)")
-        else:
-            print(f"已存在: 这批元数据本次 Zotero 会话中已保存过 (session: {session_id})")
-
+    if status == 201:
+        if not check_target(args.target, args.library_id):
+            print(f'Metadata may have been written; target changed. Reconcile session {session_id}, do not re-import.')
+            raise SystemExit(2)
+        print(f'Metadata accepted; membership/parent readback required (session: {session_id}, target: {args.target}).')
+        failed = False
         for item in items:
             print(f"  - {item.get('title', '?')}")
 
@@ -266,6 +290,9 @@ def main() -> None:
             attachment_path = record.get("attachmentPath") or record.get("attachment_path")
             if not attachment_path:
                 continue
+            if not check_target(args.target, args.library_id):
+                print('Partial: target changed; stop attachments and reconcile metadata.')
+                raise SystemExit(2)
             title = record.get("attachmentTitle") or Path(attachment_path).name
             att_status, att_resp = save_attachment(
                 session_id=session_id,
@@ -274,14 +301,17 @@ def main() -> None:
                 title=title,
             )
             if att_status == 201:
-                print(f"  附件已添加: {attachment_path}")
+                print(f"  Attachment request accepted; parent readback required: {attachment_path}")
             else:
                 print(f"  附件添加失败: HTTP {att_status}: {att_resp}")
+                failed = True
+        if failed:
+            raise SystemExit(2)
     elif status == 0:
         print("失败: Zotero 未运行或连接被拒绝")
         raise SystemExit(1)
     else:
-        print(f"失败: Zotero 返回 HTTP {status}: {resp}")
+        print(f"Unverified HTTP {status}; session {session_id}. Stop; reconcile before retry or attachments.")
         raise SystemExit(1)
 
 

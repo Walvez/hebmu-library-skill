@@ -1,6 +1,6 @@
 ---
 name: hebmu-library
-description: 河北医科大学图书馆论文下载 skill (Hebei Medical University library paper-download for Codex). WebVPN-proxied full pipelines: CNKI keyword/advanced search and parsing, 万方医学网 MedFulltext/CMAJump/DegreePaper, 中华医学期刊全文数据库 (yiigle) downloadPdfToken API chain with captcha loop and DOI->cmaid bridging, FMRS full-text requests and mail-harvest, sci-hub CDP batch capture, degree-paper PDF extraction, and idempotent Zotero local-API import with PDF attachments. Also preserves the upstream CNKI workflow capabilities (journal index/TOC, citation export, attachment workflows).
+description: "河北医科大学图书馆论文下载 skill (Hebei Medical University library paper-download for Codex). WebVPN-proxied full pipelines: CNKI keyword/advanced search and parsing, 万方医学网 MedFulltext/CMAJump/DegreePaper, 中华医学期刊全文数据库 (yiigle) downloadPdfToken API chain with captcha loop and DOI->cmaid bridging, FMRS full-text requests and mail-harvest, sci-hub CDP batch capture, degree-paper PDF extraction, and guarded Zotero Connector import with PDF attachments. Also preserves the upstream CNKI workflow capabilities (journal index/TOC, citation export, attachment workflows)."
 ---
 
 # 河北医科大学图书馆文献检索与下载(hebmu-library)
@@ -123,7 +123,7 @@ Before Zotero writes:
 Run:
 
 ```bash
-python ~/.codex/skills/hebmu-library/scripts/push_to_zotero.py /path/to/papers.json
+python ~/.codex/skills/hebmu-library/scripts/push_to_zotero.py /path/to/papers.json --target C123 --library-id 1
 ```
 
 Example with a local attachment:
@@ -160,5 +160,7 @@ Use them as follows:
 ## Provenance
 
 This skill is adapted from `https://github.com/cookjohn/cnki-skills` and keeps upstream task references in `references/upstream/`.
+
+For imports, replace example IDs with the user's confirmed local libraryID and Connector target (`C123` collection or explicitly requested `L1` library root). Missing/ambiguous destinations block script execution except read-only `--list`. The adapter checks selected target before and after writing; it cannot atomically lock Zotero's UI selection. Do not switch selection during import. An invalid/untitled record rejects the entire batch before writing to preserve record/attachment alignment. HTTP 409, timeout or partial failure is not success: stop and reconcile existing records and attachment parent IDs before any retry, even after a Zotero restart. Session hashes do not provide durable library deduplication. Verify destination membership and parent IDs by readback before reporting completion.
 
 The Codex-local executable script is `scripts/push_to_zotero.py`. The original upstream script is preserved as `references/upstream/push_to_zotero.py` for feature parity reference.
